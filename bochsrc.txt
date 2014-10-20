@@ -1,0 +1,22 @@
+# make dist-clean
+# builtin graphical debugger
+# ./configure --enable-debugger --enable-debugger-gui --enable-disasm --with-x \
+# --enable-x86-64
+# GDB
+# ./configure --with-x --enable-x86-64 --enable-gdb-stub
+# --with-nogui
+megs: 1024
+romimage: file=/usr/share/bochs/BIOS-bochs-latest
+vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
+ata0-master: type=cdrom, path=bin/luakernel.iso, status=inserted
+#display_library: sdl
+#display_library: x, options="gui_debug"
+gdbstub: enabled=1, port=1234, text_base=0, data_base=0, bss_base=0
+display_library: x
+#display_library: nogui
+log: /tmp/out.bochs
+mouse: enabled=0
+cpu: ips=15000000, reset_on_triple_fault=0
+boot: cdrom
+#magic_break: enabled=1
+#debug: action=report
