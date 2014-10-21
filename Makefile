@@ -1,8 +1,8 @@
-CFLAGS=-std=gnu99 -m64 -fno-PIC -nostdlib -nodefaultlibs -masm=intel -O1 -g -c
+CFLAGS=-std=gnu99 -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -masm=intel -O1 -g -c
 
-.PHONY: musl
+#.PHONY: musl
 
-default:
+default: musl lua libsqlite3.a liblsqlite3.a
 	./musl-custom-gcc $(CFLAGS) init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
@@ -13,13 +13,9 @@ default:
 	@#~ xxd -i luakernel.luac luakernel.luac.h
 	./generate-lua-bundle.sh
 	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 luakernel.c -fno-stack-protector -o bin/luakernel.o
-	./musl-custom-gcc -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
+	./musl-custom-gcc -L. -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
 		-o bin/kernel bin/initS.o bin/init.o bin/luakernel.o \
-		dep/lua-5.2.3/src/liblua.a dep/libsqlite3.a dep/liblsqlite3.a
-	@# SQLite3
-	@#./musl-custom-gcc $(CFLAGS) -static -DSQLITE_ENABLE_MEMSYS5=1 -DSQLITE_THREADSAFE=0 dep/sqlite3/sqlite3.c -o dep/libsqlite3.a
-	@# LuaSQLite3
-	@#./musl-custom-gcc -c $(CFLAGS) -Idep/lua-5.2.3/src/ -Idep/sqlite3 -static dep/lsqlite3.c -o dep/liblsqlite3.a
+		dep/lua-5.2.3/src/liblua.a libsqlite3.a liblsqlite3.a
 	# make bootable ISO using GRUB
 	rm -f bin/luakernel.iso
 	mkdir -p bin/boot/grub
@@ -31,9 +27,13 @@ musl:
 	cd dep/musl && ./configure --disable-shared --enable-debug && make -j5
 
 lua:
-	# note: this will not work for you because I am hardcoding paths in the specs file.
-	# I will eventually fix this.
-	cd dep/lua-5.2.3 && make -j5 LDFLAGS="-m64 -fno-PIC" CC="./musl-custom-gcc -m64 -O0 -g -fno-PIC -static" ansi
+	cd dep/lua-5.2.3 && make -j5 LDFLAGS="-m64 -fno-PIC" CC="gcc -m64 -O0 -g -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -fno-PIC -static" ansi
+
+libsqlite3.a:
+	gcc $(CFLAGS) -static -DSQLITE_ENABLE_MEMSYS5=1 -DSQLITE_THREADSAFE=0 dep/sqlite3/sqlite3.c -o libsqlite3.a
+	
+liblsqlite3.a:
+	gcc -c $(CFLAGS) -Idep/lua-5.2.3/src/ -Idep/sqlite3 -static dep/lsqlite3.c -o liblsqlite3.a
 
 run: default
 	kvm -m 1024 -boot d -vga vmware -cdrom bin/luakernel.iso
