@@ -180,8 +180,8 @@ Realm64:
   hlt
   
 // "8.9.3 Interrupt Stack Frame"
-.global handle_interupt
-handle_interupt:
+.global handle_interupt_
+handle_interupt_:
   push rax
   push rcx
   push rdx
