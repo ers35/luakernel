@@ -452,14 +452,14 @@ main(void)
   }
   if (luaL_loadbuffer(L, luakernel_lua, luakernel_lua_len, "luakernel") != LUA_OK)
   {
-    puts("luaL_loadstring: error");
+    //~ puts("luaL_loadstring: error");
     trap();
     return;
   }
   int err = lua_pcall(L, 0, LUA_MULTRET, 0);
   if (err != LUA_OK)
   {
-    puts("lua_pcall: error");
+    //~ puts("lua_pcall: error");
     trap();
     return;
   }
