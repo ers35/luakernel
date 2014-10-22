@@ -173,6 +173,12 @@ Realm64:
 #undef PIC2_CMD
 #undef PIC2_DATA
   
+  // enable FPU
+  fninit
+  push 0x037f
+  fldcw [rsp]
+  pop rax
+  
   // enable interrupts
   sti
   
