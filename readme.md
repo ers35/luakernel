@@ -5,6 +5,4 @@ BIOS Extensions are required.
 
 Use [luakernel.iso](bin/luakernel.iso) with your favorite x86 system.
 
-The author disclaims copyright to this source code.
-
 ![](screenshot.png?raw=true)
