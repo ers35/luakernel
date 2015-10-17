@@ -1,11 +1,12 @@
-CFLAGS=-std=gnu99 -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -masm=intel -O1 -g -c
+CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -masm=intel -O1 -g -c
 
 #.PHONY: musl
 
-default: musl lua libsqlite3.a liblsqlite3.a
+default: libsqlite3.a liblsqlite3.a musl lua
 	./musl-custom-gcc $(CFLAGS) init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
+	@# perhaps this is because musl is 64 bit but I pass -m32
 	gcc $(CFLAGS) -m32 init.c -o bin/init.o
 	@# init code is executed in protected mode, but is linked with 64-bit code
 	objcopy -I elf32-i386 -O elf64-x86-64 bin/init.o bin/init.o
@@ -47,8 +48,10 @@ dumpdata:
 	objdump -M intel -D bin/kernel | less
 
 debug: default
+	#kvm -s -m 1024 -boot d -vga vmware -cdrom bin/luakernel.iso
 	#qemu-system-x86_64 -boot d -cdrom bin/luakernel.iso -s -S
-	~/scratch/bochs-2.6.6/bochs -f bochsrc.txt -q
+	#~/scratch/bochs-2.6.6/bochs -f bochsrc.txt -q
+	bochs-gui-debugger -f bochsrc.txt -q
 	
 gdb:
 	#gdb -ex "set remote target-features-packet on" -ex "target remote localhost:1234" \

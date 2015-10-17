@@ -186,8 +186,15 @@ Realm64:
   hlt
   
 // "8.9.3 Interrupt Stack Frame"
-.global handle_interupt_
-handle_interupt_:
+#include "interrupt.S"
+
+// http://www.brokenthorn.com/Resources/OSDev15.html
+// http://svnweb.freebsd.org/base/head/sys/amd64/amd64/exception.S?view=co
+// http://cvsweb.openbsd.org/cgi-bin/cvsweb/~checkout~/src/sys/arch/amd64/amd64/vector.S?rev=1.43&content-type=text/plain
+// https://github.com/ReturnInfinity/BareMetal-kernel/blob/master/src/x86-64/interrupt.asm
+
+.global handle_interrupt_
+handle_interrupt_:
   push rax
   push rcx
   push rdx
@@ -195,8 +202,8 @@ handle_interupt_:
   push r9
   push r10
   push r11
-  push fs
-  push gs
+  //push fs
+  //push gs
   
   // no need to save all the segment registers since this is 64-bit mode only
   // C ensures rbx, rbp, rsi, and rdi, r12, r13, r14, and r15 are preserved.
@@ -209,8 +216,8 @@ handle_interupt_:
   // FIXME: need to pop error code if there is a error.
   // iretq pops RIP, CS, RFLAGS, RSP, and SS
 
-  pop gs
-  pop fs
+  //pop gs
+  //pop fs
   pop r11
   pop r10
   pop r9
@@ -218,6 +225,8 @@ handle_interupt_:
   pop rdx
   pop rcx
   pop rax
+  // set in the individual handlers
+  pop rdi
 
   iretq
 

@@ -14,7 +14,7 @@ end
 local modname_str = ""
 for i, modname in ipairs(modnames) do
   modname_str = 
-    modname_str .. ("{\"%s\", %s_lua, sizeof(%s_lua)},\n"):format(modname, modname, modname)
+    modname_str .. ("\t{\"%s\", %s_lua, sizeof(%s_lua)},\n"):format(modname, modname, modname)
 end
 local array = [[
 struct module
@@ -24,7 +24,7 @@ struct module
   unsigned int len;
 } lua_bundle[] = 
 {
-  %s
+%s
 };
 ]]
 local bundle = io.open("lua-bundle.h", "a+")

@@ -29,7 +29,8 @@ struct task
 void __attribute__((noinline))
 trap()
 {
-  asm volatile("");
+  //~ asm volatile("");
+  asm volatile("xchg bx, bx");
 }
 
 u8 __attribute__((aligned(16))) lua_mem[4096 * 1 * 1024] = {0};
@@ -322,13 +323,39 @@ enum
 bool new_interrupt = false;
 
 void
-handle_interrupt(void)
+handle_interrupt(u32 n)
 {
+  switch (n)
+  {
+    // general protection fault
+    case 13:
+    {
+      trap();
+      break;
+    }
+    
+    // keyboard
+    case 33:
+    {
+      //~ trap();
+      break;
+    }
+    
+    default:
+    {
+      trap();
+      break;
+    }
+  }
+  
+#if 0
+  // race condition -- lua_hook may not have been called yet
   if (new_interrupt)
   {
     // nested!
     trap();
   }
+#endif
   new_interrupt = true;
 }
 

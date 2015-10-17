@@ -100,9 +100,11 @@ setup_IDT(void)
 {
   IDTR.limit = sizeof(IDT) - 1;
   IDTR.base = (u32)IDT;
+  void handle_interrupt_0(void);
+  u32 addr = (u32)handle_interrupt_0;
   for (u32 i = 0; i < arraylen(IDT); ++i)
   {
-    void handle_interupt_(void);
-    setIDT(i, (u32)handle_interupt_, 0x08, 0x8E);
+    setIDT(i, addr, 0x08, 0x8E);
+    addr += 32;
   }
 }
