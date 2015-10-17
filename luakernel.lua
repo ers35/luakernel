@@ -201,6 +201,10 @@ function drawchar(x, y, character, r, g, b)
 end
 
 function drawtext(x, y, text)
+  -- clear line
+  for i = y, y + 14 do
+    hline(x, i, DISPLAY_WIDTH - 6, 0, 0, 0)
+  end
   text = tostring(text)
   local space = 0
   for i = 1, #text do
