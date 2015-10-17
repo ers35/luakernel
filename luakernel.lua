@@ -306,9 +306,21 @@ function green_rect_task()
   local green = 20
   while 1 do
     rectangle(410, 110, 100, 100, 0, green, 0)
-    green = green + 5
+    green = green + 3
     if green >= 255 then
       green = 20
+    end
+    wait(1000000)
+  end
+end
+
+function blue_rect_task()
+  local blue = 20
+  while 1 do
+    rectangle(420, 120, 100, 100, 0, 0, blue)
+    blue = blue + 5
+    if blue >= 255 then
+      blue = 20
     end
     wait(1000000)
   end
@@ -320,4 +332,5 @@ end
 
 taskadd("red_rect_task")
 taskadd("green_rect_task")
+taskadd("blue_rect_task")
 taskadd("keyboard_task")
