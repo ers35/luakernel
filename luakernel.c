@@ -44,6 +44,7 @@ u8 __attribute__((aligned(16))) sqlite3_mem[1024 * 8 * 1024] = {0};
 static void*
 l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
+  (void)ud;
   if (nsize == 0)
   {
     //free(ptr);
@@ -59,6 +60,11 @@ l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
     }
     // align to 16 for movaps
     lua_ptr += nsize + (16 - (nsize % 16));
+    if (new_ptr >= lua_mem + sizeof(lua_mem))
+    {
+      trap();
+      return NULL;
+    }
     return new_ptr;
     //return realloc(ptr, nsize);
   }
