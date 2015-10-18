@@ -259,7 +259,10 @@ function key_pressed(scancode)
       if chunk == nil then
         msg(errmsg)
       else
-        chunk()
+        local ok, err = pcall(function() chunk() end)
+        if not ok then
+          msg(err)
+        end
       end
       TIB = {}
       drawtext(10, cpos.y, "> ")

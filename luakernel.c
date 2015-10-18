@@ -22,7 +22,7 @@
 static lua_State *L = NULL;
 struct task
 {
-  lua_State *L;
+  lua_State *l;
   char *func_name;
 } task[8] = {0};
 
@@ -413,19 +413,19 @@ lua_taskadd(lua_State *l)
 {
   for (u32 t = 0; t < arraylen(task); ++t)
   {
-    if (!task[t].L)
+    if (!task[t].l)
     {
       size_t len;
       const char *func_name = lua_tolstring(l, -1, &len);
-      task[t].L = lua_newthread(L);
-      lua_sethook(task[t].L, lua_hook, LUA_MASKCOUNT, 1000);
+      task[t].l = lua_newthread(L);
+      lua_sethook(task[t].l, lua_hook, LUA_MASKCOUNT, 1000);
       //~ int func = luaL_ref(l, LUA_REGISTRYINDEX);
       //~ printf("%i\n", func);
-      //~ lua_rawgeti(task[t].L, LUA_REGISTRYINDEX, func);
+      //~ lua_rawgeti(task[t].l, LUA_REGISTRYINDEX, func);
       char func_name_[64] = {0};
       memcpy(func_name_, func_name, len);
       lua_pop(l, 1);
-      lua_getglobal(task[t].L, func_name_);
+      lua_getglobal(task[t].l, func_name_);
       lua_pushnumber(l, t);
       break;
     }
@@ -469,6 +469,7 @@ lua_loader(lua_State *l)
   return 1;
 }
 
+int lua_resume_code = 0;
 void
 main(void)
 {
@@ -511,9 +512,36 @@ main(void)
   {
     for (int t = 0; t < arraylen(task); ++t)
     {
-      if (task[t].L)
+      if (task[t].l)
       {
-        lua_resume(task[t].L, L, 0);
+        switch (lua_resume_code = lua_resume(task[t].l, L, 0))
+        //~ switch (lua_resume_code = lua_resume(task[t].l, NULL, 0))
+        {
+          case LUA_YIELD:
+          {
+            //~ trap();
+            break;
+          }
+          
+          case LUA_OK:
+          {
+            trap();
+            task[t].l = NULL;
+            break;
+          }
+          
+          case LUA_ERRRUN:
+          {
+            trap();
+            break;
+          }
+          
+          default:
+          {
+            trap();
+            break;
+          }
+        }
       }
     }
   }
