@@ -337,11 +337,13 @@ enum
   PIC1_CMD = 0x20,
 };
 
-bool new_interrupt = false;
+bool keyboard_interrupt = false;
 
+u32 latest_interrupt = 0;
 void
 handle_interrupt(u32 n)
 {
+  latest_interrupt = n;
   switch (n)
   {
     // general protection fault
@@ -351,9 +353,17 @@ handle_interrupt(u32 n)
       break;
     }
     
+    // page fault
+    case 14:
+    {
+      trap();
+      break;
+    }
+    
     // keyboard
     case 33:
     {
+      keyboard_interrupt = true;
       //~ trap();
       break;
     }
@@ -364,16 +374,6 @@ handle_interrupt(u32 n)
       break;
     }
   }
-  
-#if 0
-  // race condition -- lua_hook may not have been called yet
-  if (new_interrupt)
-  {
-    // nested!
-    trap();
-  }
-#endif
-  new_interrupt = true;
 }
 
 int
@@ -396,14 +396,20 @@ lua_inb(lua_State *l)
   return 1;
 }
 
+// http://lua-users.org/lists/lua-l/2003-12/msg00301.html
+// http://lua-users.org/lists/lua-l/2002-12/msg00171.html
+// http://lua-users.org/lists/lua-l/2011-06/msg00426.html
+// http://lua-users.org/lists/lua-l/2010-03/msg00679.html
+
+int nCcalls = 0;
 void
 lua_hook(lua_State *l, lua_Debug *ar)
 {
-  if (new_interrupt)
+  if (keyboard_interrupt)
   {
     lua_pushboolean(l, true);
-    lua_setglobal(l, "keyboard_interrupt_flag");
-    new_interrupt = false;
+    lua_setglobal(l, "keyboard_interrupt");
+    keyboard_interrupt = false;
   }
   lua_yield(l, 0);
 }

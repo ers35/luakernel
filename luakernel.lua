@@ -231,16 +231,25 @@ end
 drawtext(10, 10, "> ")
 
 local shift_on = 0
+local ctrl_on = 0
 local TIB = {}
-function key_pressed(scancode)
-  if scancode == 0x2a or scancode == 0x36 then
+function key_pressed(scancode_)
+  if scancode_ == 0x2a or scancode_ == 0x36 then
     shift_on = 1
     return
-  elseif scancode == 0xaa or scancode == 0xb6 then
+  elseif scancode_ == 0xaa or scancode_ == 0xb6 then
     shift_on = 0
     return
   end
-  local c = scancode2char[scancode]
+  if scancode_ == 0x1d then
+    ctrl_on = 1
+    return
+  elseif scancode_ == 0x9d then
+    ctrl_on = 0
+    return
+  end
+  --~ msg(tostring(scancode_))
+  local c = scancode2char[scancode_]
   if type(c) == "table" then
     c = c[shift_on + 1]
   end
@@ -267,6 +276,14 @@ function key_pressed(scancode)
       TIB = {}
       drawtext(10, cpos.y, "> ")
       cpos.x = 26
+    elseif ctrl_on == 1 and c == "l" then
+      for i = 6, DISPLAY_HEIGHT - 6 do
+        hline(6, i, DISPLAY_WIDTH - 6, 0, 0, 0)
+      end
+      TIB = {}
+      cpos.x = 26
+      cpos.y = 10
+      drawtext(10, cpos.y, "> ")
     else
       drawchar(cpos.x, cpos.y, c, 255, 255, 255)
       cpos.x = cpos.x + 8
@@ -280,13 +297,13 @@ end
 
 local PIC1_CMD = 0x20
 local KEYBOARD_DATA_PORT = 0x60
-keyboard_interrupt_flag = false
+keyboard_interrupt = false
 function keyboard_task()
   while 1 do
-    if keyboard_interrupt_flag then
+    if keyboard_interrupt then
       local scancode = inb(KEYBOARD_DATA_PORT)
       key_pressed(scancode)
-      keyboard_interrupt_flag = false
+      keyboard_interrupt = false
       -- interrupt EOI (ACK)
       outb(PIC1_CMD, 0x20)
     end
