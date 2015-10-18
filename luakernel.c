@@ -247,14 +247,25 @@ putpixel(lua_State *l)
   u32 r = lua_tonumber(l, 3);
   u32 g = lua_tonumber(l, 4);
   u32 b = lua_tonumber(l, 5);
-  lua_pop(L, 5);  
+  lua_pop(l, 5);
   const u32 bytes_per_pixel = (modeinfo->BitsPerPixel / 8);
+  // http://forum.osdev.org/viewtopic.php?p=77998&sid=d4699cf03655c572906144641a98e4aa#p77998
   u8 *ptr = 
     &fbmem[(y * modeinfo->BytesPerScanLine) + (x * bytes_per_pixel)];
-  ptr[0] = b;
-  ptr[1] = g;
-  ptr[2] = r;
-  ptr[3] = 0;
+  const u8 *fbmem_end = 
+    &fbmem[(modeinfo->YResolution * modeinfo->BytesPerScanLine) + (modeinfo->XResolution * bytes_per_pixel)];
+  if (ptr < fbmem_end)
+  {
+    ptr[0] = b;
+    ptr[1] = g;
+    ptr[2] = r;
+    ptr[3] = 0;
+  }
+  else
+  {
+    trap();
+  }
+
   return 0;
 }
 
