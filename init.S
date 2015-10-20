@@ -196,17 +196,25 @@ Realm64:
 .global handle_interrupt_
 handle_interrupt_:
   push rax
+  push rbx
+  push rbp
   push rcx
   push rdx
+  push rsi
+  // saved in the individual handlers
+  //push rdi
   push r8
   push r9
   push r10
   push r11
-  //push fs
-  //push gs
+  push r12
+  push r13
+  push r14
+  push r15
+  push fs
+  push gs
   
   // no need to save all the segment registers since this is 64-bit mode only
-  // C ensures rbx, rbp, rsi, and rdi, r12, r13, r14, and r15 are preserved.
 
   // NOTE: RSP is +48 with error code
   // but only +40 without error code
@@ -216,14 +224,21 @@ handle_interrupt_:
   // FIXME: need to pop error code if there is a error.
   // iretq pops RIP, CS, RFLAGS, RSP, and SS
 
-  //pop gs
-  //pop fs
+  pop gs
+  pop fs
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   pop r11
   pop r10
   pop r9
   pop r8
+  pop rsi
   pop rdx
   pop rcx
+  pop rbp
+  pop rbx
   pop rax
   // set in the individual handlers
   pop rdi
