@@ -133,40 +133,76 @@ Realm64:
   mov gs, ax
   mov ss, ax
 
-#define PIC1_CMD 0x20
-#define PIC1_DATA 0x21
-#define PIC2_CMD 0xa0
-#define PIC2_DATA 0xa1
+// http://www.brokenthorn.com/Resources/OSDevPic.html
+// http://www.brokenthorn.com/Resources/OSDev16.html
+// https://github.com/haiku/haiku/blob/5e726ed/src/system/kernel/arch/x86/pic.cpp#L219
 
-  // init PICs
-  mov al, 0x11
-  out PIC1_CMD, al
-  out PIC2_CMD, al
+#define PIC1_CMD_STATUS 0x20
+#define PIC1_IMR_DATA 0x21
+#define PIC2_CMD_STATUS 0xa0
+#define PIC2_IMR_DATA 0xa1
+
+  // ICW 1 
+  // initialization bits:
+  // 5-7: 0 unused
+  // 4:   1 initialization
+  // 3:   0 edge triggered
+  // 2:   0 ignored by x86
+  // 1:   0 cascading
+  // 0:   1 IC4 expected
+  mov al, 0b00010001
+  out PIC1_CMD_STATUS, al
+  out PIC2_CMD_STATUS, al
   
-  // remap offset address
+  // ICW 2
+  // remap base IRQ addresses outside reserved range
   mov al, 0x20
-  out PIC1_DATA, al
+  out PIC1_IMR_DATA, al
   mov al, 0x28
-  out PIC2_DATA, al
+  out PIC2_IMR_DATA, al
   
-  // cascade
-  mov al, 0
-  out PIC1_DATA, al
-  out PIC2_DATA, al
+  // ICW 3
+  // enable cascading with PIC2 at IRQ 2
+  mov al, 4
+  out PIC1_IMR_DATA, al
+  mov al, 2
+  out PIC2_IMR_DATA, al
   
-  // env info
+  // ICW 4
+  // 5-7: 0 reserved
+  // 4:   0 Special Fully Nested Mode
+  // 3:   0 buffered mode off
+  // 2:   0 buffered mode off
+  // 1:   0 auto EOI off
+  // 0:   1 8086 mode
   mov al, 0x1
-  out PIC1_DATA, al
-  out PIC2_DATA, al
+  out PIC1_IMR_DATA, al
+  out PIC2_IMR_DATA, al
   
-  // disable all interrupts via IMR
-  mov al, 0xff
-  out PIC1_DATA, al
-  out PIC2_DATA, al
+#if 1
+  // configure PIT for 100 Hz
+  mov al, 0x36
+  out 0x43, al
+  mov al, 0xa9
+  out 0x40, al
+  mov al, 0x04
+  out 0x40, al
+#endif
   
-  // enable only the keyboard interrupt
-  mov al, 0xfd
-  out PIC1_DATA, al
+#if 1
+  // write IMR
+  // IRQ 2 PIC2
+  // IRQ 1 keyboard
+  // IRQ 0 timer
+  mov al, 0b11111000
+  out PIC1_IMR_DATA, al
+  
+  // mouse is on PIC2
+  // IRQ 12 mouse
+  mov al, 0b11101111
+  //mov al, 0b11111111
+  out PIC2_IMR_DATA, al
+#endif
   
 #undef PIC1_CMD
 #undef PIC1_DATA

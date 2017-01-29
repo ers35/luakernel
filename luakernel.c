@@ -19,27 +19,81 @@
 #include "util.h"
 #include "vbe.h"
 
-static lua_State *L = NULL;
-struct task
-{
-  lua_State *l;
-  char *func_name;
-} task[8] = {0};
+extern const uintptr_t heap_start;
+u8 *heap_end = 0;
 
+static lua_State *L = NULL;
+
+#if 1
+// QEMU
 void __attribute__((noinline))
 trap()
 {
   //~ asm volatile("");
+  //~ asm volatile("int 3");
   asm volatile("xchg bx, bx");
 }
+#else
+// bochs
+#define trap() asm volatile("xchg bx, bx")
+#endif
 
-u8 __attribute__((aligned(16))) lua_mem[4096 * 1 * 1024] = {0};
+// p &lua_ptr[0]
+//~ u8 __attribute__((aligned(16))) lua_mem[4096 * 5 * 1024] = {0};
 u8 __attribute__((aligned(4096))) *lua_ptr = NULL;
 
-u8 __attribute__((aligned(16))) mem[4096 * 1 * 1024] = {0};
-u8 __attribute__((aligned(4096))) *mem_ptr = NULL;
+// need a real realloc now
 
-u8 __attribute__((aligned(16))) sqlite3_mem[1024 * 8 * 1024] = {0};
+struct block;
+static struct block
+{
+  size_t len_used_contiguous;
+  size_t len_free_contiguous;
+  struct block *prev;
+  struct block *next;
+  u8 buf[];
+} *first = NULL;
+
+static struct block*
+alloc_block(size_t size)
+{
+  size_t fsize = sizeof(struct block) + size;
+  // align
+  fsize += (16 - (fsize % 16));
+  for (struct block *foo = first; foo; foo = foo->next)
+  {
+    if (foo->len_free_contiguous >= fsize)
+    {
+      foo->next = (struct block*)((u8*)foo + fsize);
+      foo->next->len_free_contiguous = foo->len_free_contiguous - fsize;
+      foo->next->len_used_contiguous = 0;
+      foo->next->prev = foo;
+      foo->len_used_contiguous = fsize;
+      foo->len_free_contiguous = 0;
+      return foo;
+    }
+  }
+  return NULL;
+}
+
+static void
+free_block(struct block *block)
+{
+  if (block == NULL)
+  {
+    return;
+  }
+  if (block->prev)
+  {
+    block->prev->len_free_contiguous += block->len_free_contiguous;
+    block->prev->next = block->next;
+  }
+  else
+  {
+    block->len_free_contiguous = block->len_used_contiguous;
+    block->len_used_contiguous = 0;
+  }
+}
 
 static void*
 l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
@@ -60,7 +114,8 @@ l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
     }
     // align to 16 for movaps
     lua_ptr += nsize + (16 - (nsize % 16));
-    if (new_ptr >= lua_mem + sizeof(lua_mem))
+    //~ if (new_ptr >= lua_mem + sizeof(lua_mem))
+    if (new_ptr >= heap_end)
     {
       trap();
       return NULL;
@@ -243,7 +298,10 @@ __syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 
 extern u8 *volatile multiboot_boot_information;
 static struct VBEModeInfoBlock *modeinfo = NULL;
+
 static u8 *fbmem = NULL;
+static u8 *display_buffer = NULL;
+static u32 display_buffer_len = 0;
 
 int
 putpixel(lua_State *l)
@@ -257,10 +315,10 @@ putpixel(lua_State *l)
   const u32 bytes_per_pixel = (modeinfo->BitsPerPixel / 8);
   // http://forum.osdev.org/viewtopic.php?p=77998&sid=d4699cf03655c572906144641a98e4aa#p77998
   u8 *ptr = 
-    &fbmem[(y * modeinfo->BytesPerScanLine) + (x * bytes_per_pixel)];
-  const u8 *fbmem_end = 
-    &fbmem[(modeinfo->YResolution * modeinfo->BytesPerScanLine) + (modeinfo->XResolution * bytes_per_pixel)];
-  if (ptr < fbmem_end)
+    &display_buffer[(y * modeinfo->BytesPerScanLine) + (x * bytes_per_pixel)];
+  const u8 *display_buffer_end = 
+    &display_buffer[(modeinfo->YResolution * modeinfo->BytesPerScanLine)];
+  if (ptr < display_buffer_end)
   {
     ptr[0] = b;
     ptr[1] = g;
@@ -278,9 +336,21 @@ putpixel(lua_State *l)
 int
 clear_screen(lua_State *l)
 {
-  memset(fbmem, 0, modeinfo->YResolution * modeinfo->BytesPerScanLine);
+  memset(display_buffer, 0, display_buffer_len);
   return 0;
 }
+
+int
+swap_buffers(lua_State *l)
+{
+  memcpy(fbmem, display_buffer, display_buffer_len);
+  // clear old buffer
+  memset(display_buffer, 0, display_buffer_len);
+  return 0;
+}
+
+u16 DISPLAY_WIDTH = 0;
+u16 DISPLAY_HEIGHT = 0;
 
 void
 get_multiboot_info(void)
@@ -299,10 +369,8 @@ get_multiboot_info(void)
       {
         struct multiboot_tag_vbe *vbetag = (struct multiboot_tag_vbe*)tag;
         modeinfo = (struct VBEModeInfoBlock*)&vbetag->vbe_mode_info;
-        lua_pushnumber(L, modeinfo->XResolution);
-        lua_setglobal(L, "DISPLAY_WIDTH");
-        lua_pushnumber(L, modeinfo->YResolution);
-        lua_setglobal(L, "DISPLAY_HEIGHT");
+        DISPLAY_WIDTH = modeinfo->XResolution;
+        DISPLAY_HEIGHT = modeinfo->YResolution;
         break;
       }
       
@@ -312,7 +380,41 @@ get_multiboot_info(void)
         if (modeinfo)
         {
           fbmem = (u8*)fb->common.framebuffer_addr;
-          clear_screen(NULL);
+          //~ clear_screen(NULL);
+        }
+        break;
+      }
+#if 0
+      case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO:
+      {
+        struct multiboot_tag_basic_meminfo *meminfo = (struct multiboot_tag_basic_meminfo*)tag;
+        break;
+      }
+#endif
+
+      case MULTIBOOT_TAG_TYPE_MMAP:
+      {
+        struct multiboot_tag_mmap *mmap = (struct multiboot_tag_mmap*)tag;
+        for
+        (
+          struct multiboot_mmap_entry *entry = mmap->entries;
+          (u8*)entry < (u8*)mmap + tag->size;
+          entry = (struct multiboot_mmap_entry*)((u8*)entry + mmap->entry_size)
+        )
+        {
+          if (entry->type == MULTIBOOT_MEMORY_AVAILABLE)
+          {
+            // available memory:
+            // 0x0 to 0x9f000
+            // 0x100000 to 0x3FFF0000
+            // 0xdcaa00
+            if (entry->addr == 0x100000)
+            {
+              //~ heap_end = (u64)&heap_start + (entry->len - ((u64)&heap_start - entry->addr));
+              heap_end = (u8*)entry->addr + entry->len;
+              //~ trap();
+            }
+          }
         }
         break;
       }
@@ -330,14 +432,12 @@ get_multiboot_info(void)
   }
 }
 
-enum
-{
-  KEYBOARD_DATA_PORT = 0x60,
-  KEYBOARD_STATUS_PORT = 0x64,
-  PIC1_CMD = 0x20,
-};
-
 bool keyboard_interrupt = false;
+bool mouse_interrupt = false;
+u64 timer_ticks = 0;
+
+u32 keyboard_scancode_queue[8] = {0};
+u32 keyboard_scancode_queue_len = 0;
 
 u32 latest_interrupt = 0;
 void
@@ -360,17 +460,46 @@ handle_interrupt(u32 n)
       break;
     }
     
+    // timer
+    case 32:
+    {
+      //~ trap(); while (1);
+      // 100 Hz
+      timer_ticks += 1;
+      outb(0x20, 0x20);
+      break;
+    }
+    
     // keyboard
     case 33:
     {
-      keyboard_interrupt = true;
-      //~ trap();
+      //~ keyboard_interrupt = true;
+      u32 scancode = inb(0x60);
+      if (keyboard_scancode_queue_len < arraylen(keyboard_scancode_queue))
+      {
+        keyboard_scancode_queue[keyboard_scancode_queue_len] = scancode;
+        keyboard_scancode_queue_len += 1;
+      }
+      outb(0x20, 0x20);
+      break;
+    }
+    
+    // mouse
+    case 44:
+    {
+      //~ trap(); while (1);
+      mouse_interrupt = true;
+#if 1
+      u32 n = inb(0x60);
+      outb(0xa0, 0x20);
+      outb(0x20, 0x20);
+#endif
       break;
     }
     
     default:
     {
-      trap();
+      trap(); while (1);
       break;
     }
   }
@@ -401,43 +530,70 @@ lua_inb(lua_State *l)
 // http://lua-users.org/lists/lua-l/2011-06/msg00426.html
 // http://lua-users.org/lists/lua-l/2010-03/msg00679.html
 
-int nCcalls = 0;
 void
 lua_hook(lua_State *l, lua_Debug *ar)
 {
-  if (keyboard_interrupt)
-  {
-    lua_pushboolean(l, true);
-    lua_setglobal(l, "keyboard_interrupt");
-    keyboard_interrupt = false;
-  }
   lua_yield(l, 0);
 }
 
 int
-lua_taskadd(lua_State *l)
+lua_setmaskhook(lua_State *l)
 {
-  for (u32 t = 0; t < arraylen(task); ++t)
+  lua_State *t = lua_tothread(l, 1);
+  int maskcount = lua_tointeger(l, 2);
+  lua_pop(l, 2);
+  if (t)
   {
-    if (!task[t].l)
-    {
-      size_t len;
-      const char *func_name = lua_tolstring(l, -1, &len);
-      task[t].l = lua_newthread(L);
-      lua_sethook(task[t].l, lua_hook, LUA_MASKCOUNT, 1000);
-      //~ int func = luaL_ref(l, LUA_REGISTRYINDEX);
-      //~ printf("%i\n", func);
-      //~ lua_rawgeti(task[t].l, LUA_REGISTRYINDEX, func);
-      char func_name_[64] = {0};
-      memcpy(func_name_, func_name, len);
-      lua_pop(l, 1);
-      lua_getglobal(task[t].l, func_name_);
-      lua_pushnumber(l, t);
-      break;
-    }
+    lua_sethook(t, lua_hook, LUA_MASKCOUNT, maskcount);
   }
+  return 0;
+}
+
+int
+lua_get_timer_ticks(lua_State *l)
+{
+  lua_pushinteger(l, timer_ticks);
   return 1;
 }
+
+int
+lua_get_keyboard_interrupt(lua_State *l)
+{
+  // disable interrupts
+  asm volatile ("cli");
+  
+  // process interrupt data
+  lua_createtable(l, keyboard_scancode_queue_len, 0);
+  for (int i = 0; i < keyboard_scancode_queue_len; ++i)
+  {
+    lua_pushinteger(l, keyboard_scancode_queue[i]);
+    lua_rawseti(l, -2, i + 1);
+  }
+  keyboard_scancode_queue_len = 0;
+  
+  //~ lua_pushboolean(l, keyboard_interrupt);
+  //~ keyboard_interrupt = false;
+  // enable interrupts
+  asm volatile ("sti");
+  return 1;
+}
+
+int
+lua_get_mouse_interrupt(lua_State *l)
+{
+  lua_pushboolean(l, mouse_interrupt);
+  mouse_interrupt = false;
+  return 1;
+}
+
+int
+lua_hlt(lua_State *l)
+{
+  asm volatile("hlt");
+  return 0;
+}
+
+const char *errstr = NULL;
 
 int
 lua_loader(lua_State *l)
@@ -459,13 +615,15 @@ lua_loader(lua_State *l)
   }
   if (luaL_loadbuffer(l, mod->buf, mod->len, mod->name) != LUA_OK)
   {
-    puts("luaL_loadstring: error");
+    errstr = lua_tostring(l, 1);
+    //~ puts("luaL_loadstring: error");
     trap();
   }
   int err = lua_pcall(l, 0, LUA_MULTRET, 0);
   if (err != LUA_OK)
   {
-    puts("lua_pcall: error");
+    errstr = lua_tostring(l, 1);
+    //~ puts("lua_pcall: error");
     trap();
   }
   if (!lua_istable(l, -1))
@@ -479,8 +637,17 @@ int lua_resume_code = 0;
 void
 main(void)
 {
-  lua_ptr = lua_mem;
-  mem_ptr = mem;
+  get_multiboot_info();
+
+  //~ lua_ptr = lua_mem;
+  lua_ptr = (u8*)&heap_start;
+  //~ mem_ptr = mem;
+  //~ first = (struct block*)&heap_start;
+  //~ first->prev = NULL;
+  //~ first->next = NULL;
+  //~ first->len_free_contiguous = sizeof(heap_end);
+  //~ first->len_used_contiguous = 0;
+  
   L = lua_newstate(l_alloc, NULL);
   if (!L)
   {
@@ -488,22 +655,43 @@ main(void)
     return;
   }
   luaL_openlibs(L);
-  get_multiboot_info();
+  
+  display_buffer_len 
+    = (modeinfo->YResolution * modeinfo->BytesPerScanLine);
+  display_buffer = lua_newuserdata(L, display_buffer_len);
+  clear_screen(L);
+  lua_setglobal(L, "display_buffer___");
+  
+  u8 *sqlite3_mem = lua_newuserdata(L, 1024 * 8 * 1024);
+  lua_setglobal(L, "sqlite3_mem___");
+  
+  lua_pushnumber(L, DISPLAY_WIDTH);
+  lua_setglobal(L, "DISPLAY_WIDTH");
+  lua_pushnumber(L, DISPLAY_HEIGHT);
+  lua_setglobal(L, "DISPLAY_HEIGHT");  
   lua_register(L, "clear_screen", clear_screen);
   lua_register(L, "putpixel", putpixel);
+  lua_register(L, "swap_buffers", swap_buffers);
   lua_register(L, "outb", lua_outb);
   lua_register(L, "inb", lua_inb);
-  lua_register(L, "taskadd", lua_taskadd);
+  lua_register(L, "setmaskhook", lua_setmaskhook);
   lua_register(L, "loader", lua_loader);
+  lua_register(L, "get_timer_ticks", lua_get_timer_ticks);
+  lua_register(L, "get_keyboard_interrupt", lua_get_keyboard_interrupt);
+  lua_register(L, "get_mouse_interrupt", lua_get_mouse_interrupt);
+  lua_register(L, "hlt", lua_hlt);
+#if 0
   sqlite3_config(SQLITE_CONFIG_HEAP, sqlite3_mem, sizeof(sqlite3_mem), 64);
   {
     int luaopen_lsqlite3(lua_State *L);
     luaL_requiref(L, "sqlite3", luaopen_lsqlite3, 0);
     lua_pop(L, 1);
   }
+#endif
   if (luaL_loadbuffer(L, luakernel_lua, luakernel_lua_len, "luakernel") != LUA_OK)
   {
     //~ puts("luaL_loadstring: error");
+    errstr = lua_tostring(L, 1);
     trap();
     return;
   }
@@ -513,43 +701,6 @@ main(void)
     //~ puts("lua_pcall: error");
     trap();
     return;
-  }
-  while (1)
-  {
-    for (int t = 0; t < arraylen(task); ++t)
-    {
-      if (task[t].l)
-      {
-        switch (lua_resume_code = lua_resume(task[t].l, L, 0))
-        //~ switch (lua_resume_code = lua_resume(task[t].l, NULL, 0))
-        {
-          case LUA_YIELD:
-          {
-            //~ trap();
-            break;
-          }
-          
-          case LUA_OK:
-          {
-            trap();
-            task[t].l = NULL;
-            break;
-          }
-          
-          case LUA_ERRRUN:
-          {
-            trap();
-            break;
-          }
-          
-          default:
-          {
-            trap();
-            break;
-          }
-        }
-      }
-    }
   }
   trap();
 }

@@ -2,6 +2,24 @@ package.searchers[2] = function(modname)
   return loader, modname
 end
 
+timer_ticks = 0
+
+local tasks = {}
+
+function taskadd(func, name, maskcount)
+  local co = coroutine.create(func)
+  setmaskhook(co, maskcount or 1000)
+  local task = {
+    name = name or "task_" .. #tasks,
+    -- For restarting the task if it crashes.
+    func = func,
+    wait_until = 0,
+    co = co,
+  }
+  table.insert(tasks, task)
+  return task
+end
+
 -- file system
 local fs = {}
 
@@ -37,7 +55,7 @@ function open(pathname, flags, mode)
     return -1
   end
   if fs[pathname] == nil and bit32.band(flags, O_CREAT) == O_CREAT then
-    msg("creat")
+    print("creat")
     -- create new file
     fs[pathname] = 
     {
@@ -52,10 +70,10 @@ function open(pathname, flags, mode)
     pos = 1
   }
   if fd == 1 then
-    msg("warning: fd == 1 -- conflicts with stdout")
+    print("warning: fd == 1 -- conflicts with stdout")
   end
   if bit32.band(flags, O_APPEND) == O_CREAT then
-    msg("append")
+    print("append")
     fd.pos = #fd.top.buf
   end
   table.insert(fs[pathname].fd, fd)
@@ -99,10 +117,26 @@ function read(fd, count)
   return buf
 end
 
+local terminal_lines = {
+  -- Start with one empty line.
+  {}
+}
+
+local WRAP_X = 77
+local CLEAR_Y = 31
 local stdout = 1
 function write(fd, buf)
   if fd == stdout then
-    msg(buf)
+    for c in buf:gmatch(".") do
+      local line = terminal_lines[#terminal_lines]
+      table.insert(line, c)
+      if c == "\n" or #line > WRAP_X then
+        table.insert(terminal_lines, {})
+      end
+      if #terminal_lines == CLEAR_Y then
+        terminal_lines = {{}}
+      end
+    end
     return #buf
   end
   fd.top.buf = sinsert(fd.top.buf, buf, fd.pos)
@@ -133,9 +167,15 @@ function rectangle(x, y, width, height, r, g, b)
   vline(x + width, y, y + height, r, g, b)
 end
 
-local function wait(n)
-  for i = 0, n, 1 do
+local function wait(ticks)
+  local me, main = coroutine.running()
+  for _, task in ipairs(tasks) do
+    if task.co == me then
+      task.wait_until = timer_ticks + ticks
+      break
+    end
   end
+  coroutine.yield()
 end
 
 local scancode2char =
@@ -178,7 +218,7 @@ local scancode2char =
     0,	--[ All other keys are undefined --]
 }
 
-local font = require"font"
+local font = require("font")
 function drawchar(x, y, character, r, g, b)
   local f = font[character]
   if f then
@@ -201,38 +241,22 @@ function drawchar(x, y, character, r, g, b)
 end
 
 function drawtext(x, y, text)
-  -- clear line
-  for i = y, y + 14 do
-    hline(x, i, DISPLAY_WIDTH - 6, 0, 0, 0)
-  end
   text = tostring(text)
   local space = 0
   for i = 1, #text do
     local c = text:sub(i, i)
+    if c == "\n" then
+      space = 0
+      y = y + 15
+    end
     drawchar(x + space, y, c, 255, 255, 255)
     space = space + 8
   end
 end
 
--- display border
-rectangle(5, 5, DISPLAY_WIDTH - 10, DISPLAY_HEIGHT - 10, 255, 255, 255)
-
--- cursor position
-local cpos = {x = 26, y = 10}
-
-function msg(text)
-  drawtext(10, cpos.y, text)
-  cpos.y = cpos.y + 15
-  if cpos.y >= 13 * 30 then
-    cpos.y = 10
-  end
-end
-
-drawtext(10, 10, "> ")
-
+local tilda = false
 local shift_on = 0
 local ctrl_on = 0
-local TIB = {}
 function key_pressed(scancode_)
   if scancode_ == 0x2a or scancode_ == 0x36 then
     shift_on = 1
@@ -248,109 +272,168 @@ function key_pressed(scancode_)
     ctrl_on = 0
     return
   end
-  --~ msg(tostring(scancode_))
+  --~ print(tostring(scancode_))
   local c = scancode2char[scancode_]
   if type(c) == "table" then
     c = c[shift_on + 1]
   end
   if type(c) == "string" then
     if c == '\b' then
-      if cpos.x > 26 then
-        cpos.x = cpos.x - 8
-      end
-      drawchar(cpos.x, cpos.y, TIB[#TIB], 0, 0, 0)
-      TIB[#TIB] = nil
+      local line = terminal_lines[#terminal_lines]
+      table.remove(line, #line)
     elseif c == '\n' then
-      cpos.x = 10
-      cpos.y = cpos.y + 15
-      local TIBstr = table.concat(TIB)
-      local chunk, errmsg = load(TIBstr)
+      local line = terminal_lines[#terminal_lines]
+      io.write("\n")
+      local linestr = table.concat(line)
+      local chunk, errmsg = load(linestr)
       if chunk == nil then
-        msg(errmsg)
+        print(errmsg)
       else
         local ok, err = pcall(function() chunk() end)
         if not ok then
-          msg(err)
+          print(err)
         end
       end
-      TIB = {}
-      drawtext(10, cpos.y, "> ")
-      cpos.x = 26
     elseif ctrl_on == 1 and c == "l" then
-      for i = 6, DISPLAY_HEIGHT - 6 do
-        hline(6, i, DISPLAY_WIDTH - 6, 0, 0, 0)
-      end
-      TIB = {}
-      cpos.x = 26
-      cpos.y = 10
-      drawtext(10, cpos.y, "> ")
+      terminal_lines = {{}}
+    elseif c == "`" then
+      tilda = not tilda
     else
-      drawchar(cpos.x, cpos.y, c, 255, 255, 255)
-      cpos.x = cpos.x + 8
-      table.insert(TIB, c)
+      local line = terminal_lines[#terminal_lines]
+      if not line then
+        line = {}
+        terminal_lines[#terminal_lines + 1] = line
+      end
+      io.write(c)
+      io.flush()
     end
-  end
-  if cpos.y >= 40 * 10 then
-    cpos.y = 10
   end
 end
 
 local PIC1_CMD = 0x20
-local KEYBOARD_DATA_PORT = 0x60
-keyboard_interrupt = false
+local PIC2_CMD = 0xa0
+local keyboard_interrupt = 0
+
 function keyboard_task()
   while 1 do
-    if keyboard_interrupt then
-      local scancode = inb(KEYBOARD_DATA_PORT)
+    local scancodes = get_keyboard_interrupt()
+    for _, scancode in ipairs(scancodes) do
       key_pressed(scancode)
-      keyboard_interrupt = false
-      -- interrupt EOI (ACK)
-      outb(PIC1_CMD, 0x20)
     end
+    wait(5)
   end
 end
 
 function red_rect_task()
   local red = 20
   while 1 do
-    rectangle(400, 100, 100, 100, red, 0, 0)
+    for i = 1, 4 do
+      rectangle(400, 100, 100, 100, red, 0, 0)
+      wait(5)
+    end
     red = red + 1
     if red >= 255 then
       red = 20
     end
-    wait(1000000)
   end
 end
 
 function green_rect_task()
   local green = 20
   while 1 do
-    rectangle(410, 110, 100, 100, 0, green, 0)
+    for i = 1, 6 do
+      rectangle(410, 110, 100, 100, 0, green, 0)
+      wait(5)
+    end
     green = green + 3
     if green >= 255 then
       green = 20
     end
-    wait(1000000)
   end
 end
 
 function blue_rect_task()
   local blue = 20
   while 1 do
-    rectangle(420, 120, 100, 100, 0, 0, blue)
+    for i = 1, 8 do
+      rectangle(420, 120, 100, 100, 0, 0, blue)
+      wait(5)
+    end
     blue = blue + 5
     if blue >= 255 then
       blue = 20
     end
-    wait(1000000)
   end
 end
 
-function fib(n)
+local function draw_tilda()
+  -- border
+  rectangle(4, 4, DISPLAY_WIDTH - 8, DISPLAY_HEIGHT - 8, 255, 0, 255)
+end
+
+local function draw_terminal()
+  local pad_x = 10
+  local pad_y = 15
+  local cursor_x = 0
+  local cursor_y = 1
+  for y, line in ipairs(terminal_lines) do
+    local str = table.concat(line)
+    drawtext(pad_x, y * pad_y, str)
+    cursor_x = #str
+    cursor_y = y
+  end
+  -- Draw the terminal cursor.
+  rectangle((cursor_x * 8) + pad_x, (cursor_y * pad_y), 1, 14, 255, 255, 255)
+end
+
+local memk, memb = 0, 0
+function display_task()
+  local display_tick = 0
+  while 1 do
+    -- Draw a border around the screen.
+    rectangle(0, 0, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1, 255, 255, 255)
+    if tilda then
+      draw_tilda()
+    end
+    draw_terminal()
+    swap_buffers()
+    display_tick = display_tick + 1
+    wait(10)
+  end
+end
+
+local function fib(n)
   return n < 2 and n or fib(n - 1) + fib(n - 2)
 end
 
-taskadd("red_rect_task")
-taskadd("green_rect_task")
-taskadd("blue_rect_task")
-taskadd("keyboard_task")
+local keyboard = taskadd(keyboard_task, "keyboard")
+taskadd(display_task, "display")
+taskadd(red_rect_task, "red_rect")
+taskadd(green_rect_task, "green_rect")
+taskadd(blue_rect_task, "blue_rect")
+
+-- task scheduler
+-- The scheduler task is never preempted because lua_sethook has not been called on it.
+while 1 do
+  timer_ticks = get_timer_ticks()
+  local any_tasks_ready = false
+  for _, task in ipairs(tasks) do
+    local costatus = coroutine.status(task.co)
+    if costatus == "suspended" or costatus == "normal" then
+      if task.wait_until <= timer_ticks then
+        any_tasks_ready = true
+        local ok, errmsg = coroutine.resume(task.co)
+        if not ok then
+          -- print(task.name .. ": " .. errmsg)
+          print(errmsg)
+          -- Restart the task.
+          -- taskadd(task.func, task.name)
+        end
+      end
+    end
+  end
+  if not any_tasks_ready then
+    -- Idle until the next interrupt.
+    hlt()
+  end
+end

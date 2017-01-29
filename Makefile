@@ -2,7 +2,7 @@ CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-prot
 
 #.PHONY: musl
 
-default: libsqlite3.a liblsqlite3.a musl lua
+default: libsqlite3.a liblsqlite3.a #musl lua
 	./musl-custom-gcc $(CFLAGS) init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
@@ -22,7 +22,7 @@ default: libsqlite3.a liblsqlite3.a musl lua
 	mkdir -p bin/boot/grub
 	cp grub.cfg bin/boot/grub
 	@#pkgdatadir='~/scratch/grub/grub-core' ~/scratch/grub/grub-mkrescue -d /home/ers/scratch/grub/grub-core --locale-dir=/usr/lib/locale -o bin/luakernel.iso bin #-v
-	grub-mkrescue -o bin/luakernel.iso bin
+	grub-mkrescue -o bin/luakernel.iso bin #-verbose
 
 musl:
 	cd dep/musl && ./configure --disable-shared --enable-debug && make -j5
@@ -42,7 +42,7 @@ run: default
 	#~/scratch/bochs-2.6.6/bochs -f bochsrc.txt -q
 
 dump:
-	objdump -M intel -d bin/kernel | less
+	objdump -S -M intel -d bin/kernel | less
 	
 dumpdata:
 	objdump -M intel -D bin/kernel | less
@@ -50,17 +50,19 @@ dumpdata:
 debug: default
 	#kvm -s -m 1024 -boot d -vga vmware -cdrom bin/luakernel.iso
 	#qemu-system-x86_64 -boot d -cdrom bin/luakernel.iso -s -S
-	#~/scratch/bochs-2.6.6/bochs -f bochsrc.txt -q
-	bochs-gui-debugger -f bochsrc.txt -q
+	bochs-gdb-debugger -f bochsrc.txt -q
+	#bochs-gui-debugger -f bochsrc.txt -q
 	
 gdb:
 	#gdb -ex "set remote target-features-packet on" -ex "target remote localhost:1234" \
 	#-ex "set architecture i386:x86-64:intel" bin/kernel
 	
+	#-ex "break trap" -ex "break resume_error" -ex "break luaG_runerror"
+	
 	gdb -ex "target remote localhost:1234" -ex "set remote target-features-packet on" \
 	-ex "set architecture i386:x86-64:intel" \
 	-ex "set disassembly-flavor intel" -ex "layout split" -ex "set confirm off" \
-	-ex "break trap" -ex "break lua_internalrequire" \
+	-ex "break trap" \
 	bin/kernel
 	
 	# p g->strt.size

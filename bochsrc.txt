@@ -11,12 +11,16 @@ vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
 ata0-master: type=cdrom, path=bin/luakernel.iso, status=inserted
 #display_library: sdl
 #display_library: x, options="gui_debug"
-gdbstub: enabled=1, port=1234, text_base=0, data_base=0, bss_base=0
 display_library: x
 #display_library: nogui
+gdbstub: enabled=1, port=1234, text_base=0, data_base=0, bss_base=0
 log: /tmp/out.bochs
-mouse: enabled=0
+mouse: enabled=1
 cpu: ips=15000000, reset_on_triple_fault=0
 boot: cdrom
-#magic_break: enabled=1
-#debug: action=report
+magic_break: enabled=1
+# http://bochs.sourceforge.net/doc/docbook/user/howto.html#LOGOPTS-BY-DEVICE
+#debug: action=ignore, PIT=report
+debug: action=ignore, cpu0=report
+#debug: action=ignore, keyboard=report
+#info: action=report, keyboard=ignore
