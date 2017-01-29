@@ -297,7 +297,8 @@ __syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 }
 
 extern u8 *volatile multiboot_boot_information;
-static struct VBEModeInfoBlock *modeinfo = NULL;
+// static struct VBEModeInfoBlock *modeinfo = NULL;
+static struct VBEModeInfoBlock modeinfo;
 
 static u8 *fbmem = NULL;
 static u8 *display_buffer = NULL;
@@ -312,12 +313,12 @@ putpixel(lua_State *l)
   u32 g = lua_tonumber(l, 4);
   u32 b = lua_tonumber(l, 5);
   lua_pop(l, 5);
-  const u32 bytes_per_pixel = (modeinfo->BitsPerPixel / 8);
+  const u32 bytes_per_pixel = (modeinfo.BitsPerPixel / 8);
   // http://forum.osdev.org/viewtopic.php?p=77998&sid=d4699cf03655c572906144641a98e4aa#p77998
   u8 *ptr = 
-    &display_buffer[(y * modeinfo->BytesPerScanLine) + (x * bytes_per_pixel)];
+    &display_buffer[(y * modeinfo.BytesPerScanLine) + (x * bytes_per_pixel)];
   const u8 *display_buffer_end = 
-    &display_buffer[(modeinfo->YResolution * modeinfo->BytesPerScanLine)];
+    &display_buffer[(modeinfo.YResolution * modeinfo.BytesPerScanLine)];
   if (ptr < display_buffer_end)
   {
     ptr[0] = b;
@@ -368,16 +369,17 @@ get_multiboot_info(void)
       case MULTIBOOT_TAG_TYPE_VBE:
       {
         struct multiboot_tag_vbe *vbetag = (struct multiboot_tag_vbe*)tag;
-        modeinfo = (struct VBEModeInfoBlock*)&vbetag->vbe_mode_info;
-        DISPLAY_WIDTH = modeinfo->XResolution;
-        DISPLAY_HEIGHT = modeinfo->YResolution;
+        modeinfo = *(struct VBEModeInfoBlock*)&vbetag->vbe_mode_info;
+        DISPLAY_WIDTH = modeinfo.XResolution;
+        DISPLAY_HEIGHT = modeinfo.YResolution;
+        trap();
         break;
       }
       
       case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
       {
         struct multiboot_tag_framebuffer *fb = (struct multiboot_tag_framebuffer*)tag;
-        if (modeinfo)
+        if (modeinfo.XResolution > 0)
         {
           fbmem = (u8*)fb->common.framebuffer_addr;
           //~ clear_screen(NULL);
@@ -656,14 +658,15 @@ main(void)
   }
   luaL_openlibs(L);
   
-  display_buffer_len 
-    = (modeinfo->YResolution * modeinfo->BytesPerScanLine);
+  display_buffer_len = (modeinfo.YResolution * modeinfo.BytesPerScanLine);
   display_buffer = lua_newuserdata(L, display_buffer_len);
   clear_screen(L);
   lua_setglobal(L, "display_buffer___");
   
+#if 0
   u8 *sqlite3_mem = lua_newuserdata(L, 1024 * 8 * 1024);
   lua_setglobal(L, "sqlite3_mem___");
+#endif
   
   lua_pushnumber(L, DISPLAY_WIDTH);
   lua_setglobal(L, "DISPLAY_WIDTH");
