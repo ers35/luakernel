@@ -15,7 +15,7 @@
 #include "lauxlib.h"
 #include "lua-bundle.h"
 #include "multiboot2.h"
-#include "sqlite3.h"
+// #include "sqlite3.h"
 #include "util.h"
 #include "vbe.h"
 
@@ -297,7 +297,6 @@ __syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 }
 
 extern u8 *volatile multiboot_boot_information;
-// static struct VBEModeInfoBlock *modeinfo = NULL;
 static struct VBEModeInfoBlock modeinfo;
 
 static u8 *fbmem = NULL;
@@ -372,7 +371,6 @@ get_multiboot_info(void)
         modeinfo = *(struct VBEModeInfoBlock*)&vbetag->vbe_mode_info;
         DISPLAY_WIDTH = modeinfo.XResolution;
         DISPLAY_HEIGHT = modeinfo.YResolution;
-        trap();
         break;
       }
       

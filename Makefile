@@ -2,7 +2,7 @@ CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-prot
 
 #.PHONY: musl
 
-default: libsqlite3.a liblsqlite3.a #musl lua
+default: #musl lua libsqlite3.a liblsqlite3.a
 	./musl-custom-gcc $(CFLAGS) init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
@@ -15,14 +15,18 @@ default: libsqlite3.a liblsqlite3.a #musl lua
 	./generate-lua-bundle.sh
 	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 luakernel.c -fno-stack-protector -o bin/luakernel.o
 	./musl-custom-gcc -L. -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
-		-o bin/kernel bin/initS.o bin/init.o bin/luakernel.o \
-		dep/lua-5.2.3/src/liblua.a libsqlite3.a liblsqlite3.a
+		-o bin/luakernel.elf bin/initS.o bin/init.o bin/luakernel.o \
+		dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
 	# make bootable ISO using GRUB
-	rm -f bin/luakernel.iso
-	mkdir -p bin/boot/grub
+	rm -f bin/luakernel.iso bin/*.o
+	@# comment out when debugging with gdb
+	@#strip bin/luakernel.elf
+	mkdir -p bin/boot/grub/
 	cp grub.cfg bin/boot/grub
 	@#pkgdatadir='~/scratch/grub/grub-core' ~/scratch/grub/grub-mkrescue -d /home/ers/scratch/grub/grub-core --locale-dir=/usr/lib/locale -o bin/luakernel.iso bin #-v
-	grub-mkrescue -o bin/luakernel.iso bin #-verbose
+	grub-mkrescue bin --fonts= \
+	  --install-modules="normal multiboot2 part_acorn part_amiga part_apple part_bsd part_dfly part_dvh part_gpt part_msdos part_plan part_sun part_sunpc" \
+	  --locales= -o bin/luakernel.iso #-verbose
 
 musl:
 	cd dep/musl && ./configure --disable-shared --enable-debug && make -j5
@@ -38,14 +42,14 @@ liblsqlite3.a:
 
 run: default
 	kvm -m 1024 -boot d -vga vmware -cdrom bin/luakernel.iso
-	#qemu-system-x86_64 -kernel bin/kernel
+	#qemu-system-x86_64 -kernel bin/luakernel.elf
 	#~/scratch/bochs-2.6.6/bochs -f bochsrc.txt -q
 
 dump:
-	objdump -S -M intel -d bin/kernel | less
+	objdump -S -M intel -d bin/luakernel.elf | less
 	
 dumpdata:
-	objdump -M intel -D bin/kernel | less
+	objdump -M intel -D bin/luakernel.elf | less
 
 debug: default
 	#kvm -s -m 1024 -boot d -vga vmware -cdrom bin/luakernel.iso
@@ -55,7 +59,7 @@ debug: default
 	
 gdb:
 	#gdb -ex "set remote target-features-packet on" -ex "target remote localhost:1234" \
-	#-ex "set architecture i386:x86-64:intel" bin/kernel
+	#-ex "set architecture i386:x86-64:intel" bin/luakernel.elf
 	
 	#-ex "break trap" -ex "break resume_error" -ex "break luaG_runerror"
 	
@@ -63,7 +67,7 @@ gdb:
 	-ex "set architecture i386:x86-64:intel" \
 	-ex "set disassembly-flavor intel" -ex "layout split" -ex "set confirm off" \
 	-ex "break trap" \
-	bin/kernel
+	bin/luakernel.elf
 	
 	# p g->strt.size
 	# p g->strt.hash[h % g->strt.size]
@@ -82,7 +86,7 @@ gdb:
 	
 	# ctrl+x o to switch window focus for scrolling up in the command history
 
-	#nemiver --remote=localhost:1234 --gdb-binary=/usr/bin/gdb bin/kernel
+	#nemiver --remote=localhost:1234 --gdb-binary=/usr/bin/gdb bin/luakernel.elf
 	#ddd --eval-command="target remote localhost:1234"
 
 clean:

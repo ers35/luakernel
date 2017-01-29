@@ -122,7 +122,7 @@ local terminal_lines = {
   {}
 }
 
-local WRAP_X = 77
+local WRAP_X = (DISPLAY_WIDTH / 9)
 local CLEAR_Y = (DISPLAY_HEIGHT / 15) - 1
 local stdout = 1
 function write(fd, buf)
@@ -130,7 +130,7 @@ function write(fd, buf)
     for c in buf:gmatch(".") do
       local line = terminal_lines[#terminal_lines]
       table.insert(line, c)
-      if c == "\n" or #line > WRAP_X then
+      if c == "\n" or #line >= WRAP_X then
         table.insert(terminal_lines, {})
       end
       if #terminal_lines >= CLEAR_Y then
@@ -328,7 +328,7 @@ function red_rect_task()
   local red = 20
   while 1 do
     for i = 1, 4 do
-      rectangle(DISPLAY_WIDTH - 400, 100, 100, 100, red, 0, 0)
+      rectangle(DISPLAY_WIDTH - 420, 100, 100, 100, red, 0, 0)
       wait(5)
     end
     red = red + 1
@@ -356,7 +356,7 @@ function blue_rect_task()
   local blue = 20
   while 1 do
     for i = 1, 8 do
-      rectangle(DISPLAY_WIDTH - 420, 120, 100, 100, 0, 0, blue)
+      rectangle(DISPLAY_WIDTH - 400, 120, 100, 100, 0, 0, blue)
       wait(5)
     end
     blue = blue + 5
@@ -411,6 +411,8 @@ taskadd(display_task, "display")
 taskadd(red_rect_task, "red_rect")
 taskadd(green_rect_task, "green_rect")
 taskadd(blue_rect_task, "blue_rect")
+
+-- print(("123"):rep(100))
 
 -- task scheduler
 -- The scheduler task is never preempted because lua_sethook has not been called on it.
