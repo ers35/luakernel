@@ -123,7 +123,7 @@ local terminal_lines = {
 }
 
 local WRAP_X = 77
-local CLEAR_Y = 31
+local CLEAR_Y = (DISPLAY_HEIGHT / 15) - 1
 local stdout = 1
 function write(fd, buf)
   if fd == stdout then
@@ -133,7 +133,7 @@ function write(fd, buf)
       if c == "\n" or #line > WRAP_X then
         table.insert(terminal_lines, {})
       end
-      if #terminal_lines == CLEAR_Y then
+      if #terminal_lines >= CLEAR_Y then
         terminal_lines = {{}}
       end
     end
@@ -328,7 +328,7 @@ function red_rect_task()
   local red = 20
   while 1 do
     for i = 1, 4 do
-      rectangle(400, 100, 100, 100, red, 0, 0)
+      rectangle(DISPLAY_WIDTH - 400, 100, 100, 100, red, 0, 0)
       wait(5)
     end
     red = red + 1
@@ -342,7 +342,7 @@ function green_rect_task()
   local green = 20
   while 1 do
     for i = 1, 6 do
-      rectangle(410, 110, 100, 100, 0, green, 0)
+      rectangle(DISPLAY_WIDTH - 410, 110, 100, 100, 0, green, 0)
       wait(5)
     end
     green = green + 3
@@ -356,7 +356,7 @@ function blue_rect_task()
   local blue = 20
   while 1 do
     for i = 1, 8 do
-      rectangle(420, 120, 100, 100, 0, 0, blue)
+      rectangle(DISPLAY_WIDTH - 420, 120, 100, 100, 0, 0, blue)
       wait(5)
     end
     blue = blue + 5
@@ -383,7 +383,7 @@ local function draw_terminal()
     cursor_y = y
   end
   -- Draw the terminal cursor.
-  rectangle((cursor_x * 8) + pad_x, (cursor_y * pad_y), 1, 14, 255, 255, 255)
+  rectangle((cursor_x * 8) + pad_x, (cursor_y * pad_y) - 2, 1, 14, 255, 255, 255)
 end
 
 local memk, memb = 0, 0
