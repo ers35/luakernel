@@ -3,17 +3,17 @@ CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-prot
 #.PHONY: musl
 
 default: #musl lua libsqlite3.a liblsqlite3.a
-	./musl-custom-gcc $(CFLAGS) init.S -o bin/initS.o
+	./musl-custom-gcc $(CFLAGS) src/init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
 	@# perhaps this is because musl is 64 bit but I pass -m32
-	gcc $(CFLAGS) -m32 init.c -o bin/init.o
+	gcc $(CFLAGS) -m32 src/init.c -o bin/init.o
 	@# init code is executed in protected mode, but is linked with 64-bit code
 	objcopy -I elf32-i386 -O elf64-x86-64 bin/init.o bin/init.o
 	@#~ luac -o luakernel.luac luakernel.lua
 	@#~ xxd -i luakernel.luac luakernel.luac.h
-	./generate-lua-bundle.sh
-	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 luakernel.c -fno-stack-protector -o bin/luakernel.o
+	cd src && ../generate-lua-bundle.sh
+	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 src/luakernel.c -fno-stack-protector -o bin/luakernel.o
 	./musl-custom-gcc -L. -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
 	  -o bin/luakernel.elf bin/initS.o bin/init.o bin/luakernel.o \
 	  dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
