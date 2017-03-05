@@ -185,37 +185,37 @@ local scancode2char =
   '\t',			--[ Tab --]
   'q', 'w', 'e', 'r',	--[ 19 --]
   't', 'y', 'u', 'i', 'o', 'p', {'[', '{'}, {']', '}'}, '\n',	--[ Enter key --]
-    0,			--[ 29   - Control --]
+  0,			--[ 29   - Control --]
   'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', {';', ':'},	--[ 39 --]
   {'\'', '"'}, '`',   0,		--[ Left shift --]
- '\\', 'z', 'x', 'c', 'v', 'b', 'n',			--[ 49 --]
+  '\\', 'z', 'x', 'c', 'v', 'b', 'n',			--[ 49 --]
   'm', {',', '<'}, {'.', '>'}, '/',   0,				--[ Right shift --]
   '*',
-    0,	--[ Alt --]
+  0,	--[ Alt --]
   ' ',	--[ Space bar --]
-    0,	--[ Caps lock --]
-    0,	--[ 59 - F1 key ... > --]
-    0,   0,   0,   0,   0,   0,   0,   0,
-    0,	--[ < ... F10 --]
-    0,	--[ 69 - Num lock--]
-    0,	--[ Scroll Lock --]
-    0,	--[ Home key --]
-    0,	--[ Up Arrow --]
-    0,	--[ Page Up --]
+  0,	--[ Caps lock --]
+  0,	--[ 59 - F1 key ... > --]
+  0,   0,   0,   0,   0,   0,   0,   0,
+  0,	--[ < ... F10 --]
+  0,	--[ 69 - Num lock--]
+  0,	--[ Scroll Lock --]
+  0,	--[ Home key --]
+  0,	--[ Up Arrow --]
+  0,	--[ Page Up --]
   '-',
-    0,	--[ Left Arrow --]
-    0,
-    0,	--[ Right Arrow --]
+  0,	--[ Left Arrow --]
+  0,
+  0,	--[ Right Arrow --]
   '+',
-    0,	--[ 79 - End key--]
-    0,	--[ Down Arrow --]
-    0,	--[ Page Down --]
-    0,	--[ Insert Key --]
-    0,	--[ Delete Key --]
-    0,   0,   0,
-    0,	--[ F11 Key --]
-    0,	--[ F12 Key --]
-    0,	--[ All other keys are undefined --]
+  0,	--[ 79 - End key--]
+  0,	--[ Down Arrow --]
+  0,	--[ Page Down --]
+  0,	--[ Insert Key --]
+  0,	--[ Delete Key --]
+  0,   0,   0,
+  0,	--[ F11 Key --]
+  0,	--[ F12 Key --]
+  0,	--[ All other keys are undefined --]
 }
 
 local font = require("font")
@@ -272,7 +272,7 @@ function key_pressed(scancode_)
     ctrl_on = 0
     return
   end
-  --~ print(tostring(scancode_))
+  -- print(tostring(scancode_))
   local c = scancode2char[scancode_]
   if type(c) == "table" then
     c = c[shift_on + 1]
@@ -310,11 +310,7 @@ function key_pressed(scancode_)
   end
 end
 
-local PIC1_CMD = 0x20
-local PIC2_CMD = 0xa0
-local keyboard_interrupt = 0
-
-function keyboard_task()
+local function keyboard_task()
   while 1 do
     local scancodes = get_keyboard_interrupt()
     for _, scancode in ipairs(scancodes) do
@@ -324,7 +320,7 @@ function keyboard_task()
   end
 end
 
-function red_rect_task()
+local function red_rect_task()
   local red = 20
   while 1 do
     for i = 1, 4 do
@@ -338,7 +334,7 @@ function red_rect_task()
   end
 end
 
-function green_rect_task()
+local function green_rect_task()
   local green = 20
   while 1 do
     for i = 1, 6 do
@@ -352,7 +348,7 @@ function green_rect_task()
   end
 end
 
-function blue_rect_task()
+local function blue_rect_task()
   local blue = 20
   while 1 do
     for i = 1, 8 do
@@ -367,7 +363,7 @@ function blue_rect_task()
 end
 
 local function draw_tilda()
-  -- border
+  -- Draw border.
   rectangle(4, 4, DISPLAY_WIDTH - 8, DISPLAY_HEIGHT - 8, 255, 0, 255)
 end
 
@@ -386,9 +382,7 @@ local function draw_terminal()
   rectangle((cursor_x * 8) + pad_x, (cursor_y * pad_y) - 2, 1, 14, 255, 255, 255)
 end
 
-local memk, memb = 0, 0
-function display_task()
-  local display_tick = 0
+local function display_task()
   while 1 do
     -- Draw a border around the screen.
     rectangle(0, 0, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1, 255, 255, 255)
@@ -397,25 +391,23 @@ function display_task()
     end
     draw_terminal()
     swap_buffers()
-    display_tick = display_tick + 1
     wait(10)
   end
 end
 
-local function fib(n)
+function fib(n)
   return n < 2 and n or fib(n - 1) + fib(n - 2)
 end
 
-local keyboard = taskadd(keyboard_task, "keyboard")
+taskadd(keyboard_task, "keyboard")
 taskadd(display_task, "display")
 taskadd(red_rect_task, "red_rect")
 taskadd(green_rect_task, "green_rect")
 taskadd(blue_rect_task, "blue_rect")
 
--- print(("123"):rep(100))
-
--- task scheduler
--- The scheduler task is never preempted because lua_sethook has not been called on it.
+--[[
+The scheduler task is never preempted because lua_sethook() has not been called on it.
+--]]
 while 1 do
   timer_ticks = get_timer_ticks()
   local any_tasks_ready = false

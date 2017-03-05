@@ -15,11 +15,11 @@ default: #musl lua libsqlite3.a liblsqlite3.a
 	./generate-lua-bundle.sh
 	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 luakernel.c -fno-stack-protector -o bin/luakernel.o
 	./musl-custom-gcc -L. -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
-		-o bin/luakernel.elf bin/initS.o bin/init.o bin/luakernel.o \
-		dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
+	  -o bin/luakernel.elf bin/initS.o bin/init.o bin/luakernel.o \
+	  dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
 	# make bootable ISO using GRUB
 	rm -f bin/luakernel.iso bin/*.o
-	@# comment out when debugging with gdb
+	@# comment out when debugging with gdb -- uncomment to get under 1.44 MB
 	@#strip bin/luakernel.elf
 	mkdir -p bin/boot/grub/
 	cp grub.cfg bin/boot/grub
