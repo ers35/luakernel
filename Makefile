@@ -2,7 +2,7 @@ CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-prot
 
 #.PHONY: musl
 
-default: #musl lua libsqlite3.a liblsqlite3.a
+default: dep/musl/lib/libc.a dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
 	./musl-custom-gcc $(CFLAGS) src/init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
@@ -28,10 +28,10 @@ default: #musl lua libsqlite3.a liblsqlite3.a
 	  --install-modules="normal multiboot2 part_acorn part_amiga part_apple part_bsd part_dfly part_dvh part_gpt part_msdos part_plan part_sun part_sunpc" \
 	  --locales= -o bin/luakernel.iso #-verbose
 
-musl:
+dep/musl/lib/libc.a:
 	cd dep/musl && ./configure --disable-shared --enable-debug && make -j5
 
-lua:
+dep/lua-5.2.3/src/liblua.a:
 	cd dep/lua-5.2.3 && make -j5 LDFLAGS="-m64 -fno-PIC" CC="gcc -m64 -O0 -g -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -fno-PIC -static" ansi
 
 libsqlite3.a:
@@ -91,3 +91,5 @@ gdb:
 
 clean:
 	#rm -f bin/*
+	cd dep/musl && make clean
+	cd dep/lua-5.2.3 && make clean
