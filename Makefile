@@ -2,7 +2,7 @@ CFLAGS=-std=gnu99 -static -m64 -fno-PIC -nostdlib -nodefaultlibs -fno-stack-prot
 
 #.PHONY: musl
 
-default: dep/musl/lib/libc.a dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
+default: dep/musl/lib/libc.a dep/lua-5.2.3/src/liblua.a libsqlite3.a liblsqlite3.a
 	./musl-custom-gcc $(CFLAGS) src/init.S -o bin/initS.o
 	@# not sure why this has to be gcc instead of musl-gcc
 	@# trap on lgdt if musl-gcc
@@ -16,17 +16,28 @@ default: dep/musl/lib/libc.a dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite
 	./musl-custom-gcc $(CFLAGS) -Idep/lua-5.2.3/src -Idep/sqlite3 src/luakernel.c -fno-stack-protector -o bin/luakernel.o
 	./musl-custom-gcc -L. -T link.ld -fno-PIC -static -z max-page-size=0x1000 \
 	  -o bin/luakernel.elf bin/initS.o bin/init.o bin/luakernel.o \
-	  dep/lua-5.2.3/src/liblua.a #libsqlite3.a liblsqlite3.a
+	  dep/lua-5.2.3/src/liblua.a libsqlite3.a liblsqlite3.a
 	# make bootable ISO using GRUB
 	rm -f bin/luakernel.iso bin/*.o
 	@# comment out when debugging with gdb -- uncomment to get under 1.44 MB
-	@#strip bin/luakernel.elf
+# 	strip bin/luakernel.elf
 	mkdir -p bin/boot/grub/
 	cp grub.cfg bin/boot/grub
 	@#pkgdatadir='~/scratch/grub/grub-core' ~/scratch/grub/grub-mkrescue -d /home/ers/scratch/grub/grub-core --locale-dir=/usr/lib/locale -o bin/luakernel.iso bin #-v
-	grub-mkrescue bin --fonts= \
-	  --install-modules="normal multiboot2 part_acorn part_amiga part_apple part_bsd part_dfly part_dvh part_gpt part_msdos part_plan part_sun part_sunpc" \
-	  --locales= -o bin/luakernel.iso #-verbose
+	
+	grub-mkimage --format=i386-pc-eltorito --prefix="(cd)/boot/grub" --output=bin/grub.img \
+	  --compression=none \
+	  --config="bin/boot/grub/grub.cfg" loadenv biosdisk part_msdos part_gpt fat \
+	  iso9660 loopback search boot minicmd cat cpuid chain \
+	  halt help ls reboot echo test configfile normal sleep memdisk font \
+	  gfxterm gettext true vbe vga video_bochs video_cirrus multiboot multiboot2
+	
+	genisoimage -graft-points -input-charset utf8 -A "LuaKernel" -quiet -R -b \
+	  boot/grub/grub.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+	  -o bin/luakernel.iso \
+	  luakernel.elf=bin/luakernel.elf \
+	  boot/grub/grub.cfg=bin/boot/grub/grub.cfg \
+	  boot/grub/grub.img=bin/grub.img
 
 dep/musl/lib/libc.a:
 	cd dep/musl && ./configure --disable-shared --enable-debug && make -j5
@@ -90,6 +101,6 @@ gdb:
 	#ddd --eval-command="target remote localhost:1234"
 
 clean:
-	#rm -f bin/*
+	rm -f bin/grub.img bin/luakernel.elf
 	cd dep/musl && make clean
 	cd dep/lua-5.2.3 && make clean

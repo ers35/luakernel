@@ -1,3 +1,5 @@
+local sqlite3 = require("lsqlite3")
+
 package.searchers[2] = function(modname)
   return loader, modname
 end
@@ -404,6 +406,25 @@ taskadd(display_task, "display")
 taskadd(red_rect_task, "red_rect")
 taskadd(green_rect_task, "green_rect")
 taskadd(blue_rect_task, "blue_rect")
+
+local function database_open()
+  db = sqlite3.open_memory()
+  db:exec([[
+  CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT);
+  INSERT INTO test (data) VALUES ('hello world');
+  INSERT INTO test (data) VALUES ('hello lua');
+  INSERT INTO test (data) VALUES ('hello sqlite3');
+  ]])
+  -- print(db:errmsg())
+end
+database_open()
+
+function db_test()
+  print(db)
+  for row in db:nrows("SELECT * FROM test") do
+    print(row.id, row.data)
+  end
+end
 
 --[[
 The scheduler task is never preempted because lua_sethook() has not been called on it.

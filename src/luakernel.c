@@ -15,7 +15,7 @@
 #include "lauxlib.h"
 #include "lua-bundle.h"
 #include "multiboot2.h"
-// #include "sqlite3.h"
+#include "sqlite3.h"
 #include "util.h"
 #include "vbe.h"
 
@@ -661,8 +661,9 @@ main(void)
   clear_screen(L);
   lua_setglobal(L, "display_buffer___");
   
-#if 0
-  u8 *sqlite3_mem = lua_newuserdata(L, 1024 * 8 * 1024);
+#if 1
+  const size_t sqlite3_mem_size = 1024 * 8 * 1024;
+  u8 *sqlite3_mem = lua_newuserdata(L, sqlite3_mem_size);
   lua_setglobal(L, "sqlite3_mem___");
 #endif
   
@@ -681,11 +682,11 @@ main(void)
   lua_register(L, "get_keyboard_interrupt", lua_get_keyboard_interrupt);
   lua_register(L, "get_mouse_interrupt", lua_get_mouse_interrupt);
   lua_register(L, "hlt", lua_hlt);
-#if 0
-  sqlite3_config(SQLITE_CONFIG_HEAP, sqlite3_mem, sizeof(sqlite3_mem), 64);
+#if 1
+  sqlite3_config(SQLITE_CONFIG_HEAP, sqlite3_mem, sqlite3_mem_size, 64);
   {
     int luaopen_lsqlite3(lua_State *L);
-    luaL_requiref(L, "sqlite3", luaopen_lsqlite3, 0);
+    luaL_requiref(L, "lsqlite3", luaopen_lsqlite3, 0);
     lua_pop(L, 1);
   }
 #endif
