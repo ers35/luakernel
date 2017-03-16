@@ -20,7 +20,7 @@
 #include "vbe.h"
 
 extern const uintptr_t heap_start;
-u8 *heap_end = 0;
+static u8 *heap_end = 0;
 
 static lua_State *L = NULL;
 
@@ -49,18 +49,11 @@ static void* l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
   }
   else
   {
-   return sqlite3_realloc(ptr, nsize);
+    return sqlite3_realloc(ptr, nsize);
   }
 }
 
-struct __attribute__((packed, aligned(1)))
-{
-  u8 character;
-  u8 attribute;
-} (*screen)[80 * 25] = (void*)0xb8000;
-
-long 
-handle_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+long handle_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 {
   switch (n)
   {
@@ -223,8 +216,7 @@ handle_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
   }
 }
 
-long 
-__syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+long __syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
 {
   handle_syscall(n, a1, a2, a3, a4, a5, a6);
 }
@@ -236,8 +228,7 @@ static u8 *fbmem = NULL;
 static u8 *display_buffer = NULL;
 static u32 display_buffer_len = 0;
 
-int
-putpixel(lua_State *l)
+static int putpixel(lua_State *l)
 {
   u32 x = lua_tonumber(l, 1);
   u32 y = lua_tonumber(l, 2);
@@ -266,27 +257,20 @@ putpixel(lua_State *l)
   return 0;
 }
 
-int
-clear_screen(lua_State *l)
+static int clear_screen(lua_State *l)
 {
   memset(display_buffer, 0, display_buffer_len);
   return 0;
 }
 
-int
-swap_buffers(lua_State *l)
+static int swap_buffers(lua_State *l)
 {
   memcpy(fbmem, display_buffer, display_buffer_len);
-  // clear old buffer
-  memset(display_buffer, 0, display_buffer_len);
+  clear_screen(l);
   return 0;
 }
 
-u16 DISPLAY_WIDTH = 0;
-u16 DISPLAY_HEIGHT = 0;
-
-void
-get_multiboot_info(void)
+static void get_multiboot_info(void)
 {
   if (multiboot_boot_information == NULL)
   {
@@ -302,8 +286,6 @@ get_multiboot_info(void)
       {
         struct multiboot_tag_vbe *vbetag = (struct multiboot_tag_vbe*)tag;
         modeinfo = *(struct VBEModeInfoBlock*)&vbetag->vbe_mode_info;
-        DISPLAY_WIDTH = modeinfo.XResolution;
-        DISPLAY_HEIGHT = modeinfo.YResolution;
         break;
       }
       
@@ -313,7 +295,6 @@ get_multiboot_info(void)
         if (modeinfo.XResolution > 0)
         {
           fbmem = (u8*)fb->common.framebuffer_addr;
-          //~ clear_screen(NULL);
         }
         break;
       }
@@ -364,16 +345,13 @@ get_multiboot_info(void)
   }
 }
 
-u64 timer_ticks = 0;
+static u64 timer_ticks = 0;
 
-u32 keyboard_scancode_queue[8] = {0};
-u32 keyboard_scancode_queue_len = 0;
+static u32 keyboard_scancode_queue[8] = {0};
+static u32 keyboard_scancode_queue_len = 0;
 
-u32 latest_interrupt = 0;
-void
-handle_interrupt(u32 n)
+void handle_interrupt(u32 n)
 {
-  latest_interrupt = n;
   switch (n)
   {
     // general protection fault
@@ -430,8 +408,7 @@ handle_interrupt(u32 n)
   }
 }
 
-int
-lua_outb(lua_State *l)
+static int lua_outb(lua_State *l)
 {
   const u32 addr = lua_tonumber(l, 1);
   const u8 value = lua_tonumber(l, 2);
@@ -440,8 +417,7 @@ lua_outb(lua_State *l)
   return 0;
 }
 
-int
-lua_inb(lua_State *l)
+static int lua_inb(lua_State *l)
 {
   const u32 addr = lua_tonumber(l, 1);
   lua_pop(l, 1);
@@ -455,14 +431,12 @@ lua_inb(lua_State *l)
 // http://lua-users.org/lists/lua-l/2011-06/msg00426.html
 // http://lua-users.org/lists/lua-l/2010-03/msg00679.html
 
-void
-lua_hook(lua_State *l, lua_Debug *ar)
+static void lua_hook(lua_State *l, lua_Debug *ar)
 {
   lua_yield(l, 0);
 }
 
-int
-lua_setmaskhook(lua_State *l)
+static int lua_setmaskhook(lua_State *l)
 {
   lua_State *t = lua_tothread(l, 1);
   int maskcount = lua_tointeger(l, 2);
@@ -474,15 +448,13 @@ lua_setmaskhook(lua_State *l)
   return 0;
 }
 
-int
-lua_get_timer_ticks(lua_State *l)
+static int lua_get_timer_ticks(lua_State *l)
 {
   lua_pushinteger(l, timer_ticks);
   return 1;
 }
 
-int
-lua_get_keyboard_interrupt(lua_State *l)
+static int lua_get_keyboard_interrupt(lua_State *l)
 {
   // disable interrupts
   asm volatile ("cli");
@@ -501,8 +473,7 @@ lua_get_keyboard_interrupt(lua_State *l)
   return 1;
 }
 
-int
-lua_hlt(lua_State *l)
+static int lua_hlt(lua_State *l)
 {
   asm volatile("hlt");
   return 0;
@@ -510,8 +481,7 @@ lua_hlt(lua_State *l)
 
 const char *errstr = NULL;
 
-int
-lua_loader(lua_State *l)
+static int lua_loader(lua_State *l)
 {
   size_t len;
   const char *modname = lua_tolstring(l, -1, &len);
@@ -548,9 +518,7 @@ lua_loader(lua_State *l)
   return 1;
 }
 
-int lua_resume_code = 0;
-void
-main(void)
+void main(void)
 {
   get_multiboot_info();
   
@@ -569,9 +537,9 @@ main(void)
   display_buffer = lua_newuserdata(L, display_buffer_len);
   clear_screen(L);
   
-  lua_pushnumber(L, DISPLAY_WIDTH);
+  lua_pushnumber(L, modeinfo.XResolution);
   lua_setglobal(L, "DISPLAY_WIDTH");
-  lua_pushnumber(L, DISPLAY_HEIGHT);
+  lua_pushnumber(L, modeinfo.YResolution);
   lua_setglobal(L, "DISPLAY_HEIGHT");  
   lua_register(L, "clear_screen", clear_screen);
   lua_register(L, "putpixel", putpixel);

@@ -308,6 +308,7 @@ function key_pressed(scancode_)
   end
 end
 
+-- TODO: don't poll
 local function keyboard_task()
   while 1 do
     local scancodes = get_keyboard_interrupt()
