@@ -387,6 +387,12 @@ local function display_task()
     if tilda then
       draw_tilda()
     end
+    
+    -- Memory usage.
+    local bytes_used = math.ceil(collectgarbage("count"))
+    local message = ("memory usage: %u kilobytes     "):format(bytes_used)
+    drawtext(DISPLAY_WIDTH - #message * 8, 150, message)
+    
     draw_terminal()
     swap_buffers()
     wait(10)

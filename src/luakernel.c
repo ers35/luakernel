@@ -38,36 +38,18 @@ trap()
 #define trap() asm volatile("xchg bx, bx")
 #endif
 
-// p &lua_ptr[0]
-u8 __attribute__((aligned(4096))) *lua_ptr = NULL;
-
-static void*
-l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+static void* l_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   (void)ud;
+  (void)osize;
   if (nsize == 0)
   {
-    //free(ptr);
+    sqlite3_free(ptr);
     return NULL;
   }
   else
   {
-    // FIXME: this actually needs to be realloc
-    u8 *new_ptr = lua_ptr;
-    if (ptr)
-    {
-      memmove(new_ptr, ptr, osize);
-    }
-    // align to 16 for movaps
-    lua_ptr += nsize + (16 - (nsize % 16));
-    //~ if (new_ptr >= lua_mem + sizeof(lua_mem))
-    if (new_ptr >= heap_end)
-    {
-      trap();
-      return NULL;
-    }
-    return new_ptr;
-    //return realloc(ptr, nsize);
+   return sqlite3_realloc(ptr, nsize);
   }
 }
 
@@ -85,7 +67,7 @@ handle_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
     case SYS_brk:
     {
       void *end = (void*)a1;
-      
+      // trap();
       return 0;
       break;
     }
@@ -225,6 +207,11 @@ handle_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6)
     {
       struct timeval *tv = (struct timeval*)a1;
       *tv = (struct timeval){0};
+      return 0;
+    }
+    
+    case SYS_fcntl:
+    {
       return 0;
     }
     
@@ -566,8 +553,9 @@ void
 main(void)
 {
   get_multiboot_info();
-
-  lua_ptr = (u8*)&heap_start;
+  
+  // Use SQLite3 as the only memory allocator because musl's malloc requires mmap.
+  sqlite3_config(SQLITE_CONFIG_HEAP, &heap_start, heap_end - (u8*)&heap_start, 64);
   
   L = lua_newstate(l_alloc, NULL);
   if (!L)
@@ -580,12 +568,6 @@ main(void)
   display_buffer_len = (modeinfo.YResolution * modeinfo.BytesPerScanLine);
   display_buffer = lua_newuserdata(L, display_buffer_len);
   clear_screen(L);
-  
-#if 1
-  const size_t sqlite3_mem_size = 1024 * 8 * 1024;
-  u8 *sqlite3_mem = lua_newuserdata(L, sqlite3_mem_size);
-  lua_setglobal(L, "sqlite3_mem___");
-#endif
   
   lua_pushnumber(L, DISPLAY_WIDTH);
   lua_setglobal(L, "DISPLAY_WIDTH");
@@ -601,14 +583,11 @@ main(void)
   lua_register(L, "get_timer_ticks", lua_get_timer_ticks);
   lua_register(L, "get_keyboard_interrupt", lua_get_keyboard_interrupt);
   lua_register(L, "hlt", lua_hlt);
-#if 1
-  sqlite3_config(SQLITE_CONFIG_HEAP, sqlite3_mem, sqlite3_mem_size, 64);
-  {
-    int luaopen_lsqlite3(lua_State *L);
-    luaL_requiref(L, "lsqlite3", luaopen_lsqlite3, 0);
-    lua_pop(L, 1);
-  }
-#endif
+  
+  int luaopen_lsqlite3(lua_State *L);
+  luaL_requiref(L, "lsqlite3", luaopen_lsqlite3, 0);
+  lua_pop(L, 1);
+  
   if (luaL_loadbuffer(L, luakernel_lua, luakernel_lua_len, "luakernel") != LUA_OK)
   {
     //~ puts("luaL_loadstring: error");
