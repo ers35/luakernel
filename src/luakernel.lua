@@ -82,10 +82,6 @@ function open(pathname, flags, mode)
   return fd
 end
 
-function close(fd)
-  
-end
-
 local SEEK_SET = 0
 local SEEK_CUR = 1
 local SEEK_END = 2
